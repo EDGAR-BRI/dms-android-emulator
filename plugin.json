@@ -1,0 +1,29 @@
+{
+    "id": "androidEmulator",
+    "name": "Android Emulator & ADB Manager",
+    "description": "Manage, launch, configure Android Studio AVDs and run quick ADB actions directly from DMS without opening Android Studio",
+    "version": "1.0.0",
+    "license": "MIT",
+    "author": "EDGAR-BRI",
+    "icon": "smartphone",
+    "type": "composite",
+    "capabilities": [
+        "daemon",
+        "dankbar-widget",
+        "ipc"
+    ],
+    "components": {
+        "daemon": "./AndroidEmulator.qml",
+        "widget": "./AndroidEmulatorWidget.qml"
+    },
+    "settings": "./AndroidEmulatorSettings.qml",
+    "requires_dms": ">=1.5.0",
+    "dependencies": [
+        "python3"
+    ],
+    "permissions": [
+        "settings_read",
+        "settings_write",
+        "shell_execute"
+    ]
+}
