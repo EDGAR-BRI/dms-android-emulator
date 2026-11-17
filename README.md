@@ -48,7 +48,8 @@ dms ipc call androidEmulator openSettings    # Abrir editor y herramientas ADB
 ### Niri (`~/.config/niri/config.kdl`)
 ```kdl
     Mod+Alt+E hotkey-overlay-title="Iniciar/Detener Emulador Android" { spawn "dms" "ipc" "call" "androidEmulator" "toggleDefault"; }
-    Mod+Shift+E hotkey-overlay-title="Configuración Emulador Android" { spawn "dms" "ipc" "call" "androidEmulator" "openSettings"; }
+    Mod+Alt+A hotkey-overlay-title="Panel rápido de Emuladores Android" { spawn "dms" "ipc" "call" "control-center" "openWith" "plugin_androidEmulator"; }
+    Mod+Shift+A hotkey-overlay-title="Configuración de Emuladores Android & ADB" { spawn "dms" "ipc" "call" "androidEmulator" "openSettings"; }
 ```
 
 ### Hyprland (`~/.config/hypr/hyprland.conf`)

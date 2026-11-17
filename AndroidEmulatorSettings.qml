@@ -1115,7 +1115,8 @@ PluginSettings {
             BindCode {
                 titleText: "Niri (~/.config/niri/config.kdl)"
                 code: "Mod+Alt+E hotkey-overlay-title=\"Iniciar/Detener Emulador Android\" { spawn \"dms\" \"ipc\" \"call\" \"androidEmulator\" \"toggleDefault\"; }\n" +
-                      "Mod+Shift+E hotkey-overlay-title=\"Abrir Configuración Emulador Android\" { spawn \"dms\" \"ipc\" \"call\" \"androidEmulator\" \"openSettings\"; }"
+                      "Mod+Alt+A hotkey-overlay-title=\"Panel rápido de Emuladores Android\" { spawn \"dms\" \"ipc\" \"call\" \"control-center\" \"openWith\" \"plugin_androidEmulator\"; }\n" +
+                      "Mod+Shift+A hotkey-overlay-title=\"Configuración de Emuladores Android & ADB\" { spawn \"dms\" \"ipc\" \"call\" \"androidEmulator\" \"openSettings\"; }"
             }
 
             BindCode {
