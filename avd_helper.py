@@ -132,10 +132,79 @@ def run_cmd(cmd: list, timeout: float = 4.0, env: dict = None) -> tuple:
 
 def sdk_env(paths: dict) -> dict:
     env = os.environ.copy()
-    if paths.get("sdk_dir"):
-        env["ANDROID_HOME"] = paths["sdk_dir"]
-        env["ANDROID_SDK_ROOT"] = paths["sdk_dir"]
+    sdk_dir = paths.get("sdk_dir", "")
+    if sdk_dir:
+        env["ANDROID_HOME"] = sdk_dir
+        env["ANDROID_SDK_ROOT"] = sdk_dir
+        pt_dir = str(Path(sdk_dir) / "platform-tools")
+        emu_dir = str(Path(sdk_dir) / "emulator")
+        old_path = env.get("PATH", "")
+        clean_parts = [
+            p for p in old_path.split(os.pathsep)
+            if p and not (p.startswith("/opt/android-sdk") and sdk_dir != "/opt/android-sdk")
+        ]
+        env["PATH"] = os.pathsep.join([pt_dir, emu_dir] + clean_parts)
     return env
+
+
+def ensure_emulator_conf(paths: dict) -> None:
+    """Ensure Qt Emulator.conf enables clipboardSharing and points adbPath to the real adb binary."""
+    conf_dir = Path.home() / ".config" / "Android Open Source Project"
+    conf_file = conf_dir / "Emulator.conf"
+    adb_bin = paths.get("adb_bin", "")
+    try:
+        conf_dir.mkdir(parents=True, exist_ok=True)
+        lines = []
+        if conf_file.is_file():
+            lines = conf_file.read_text(encoding="utf-8", errors="replace").splitlines()
+
+        has_set_section = False
+        in_set_section = False
+        updated_keys = set()
+        desired = {
+            "clipboardSharing": "true",
+        }
+        if adb_bin:
+            desired["autoFindAdb"] = "false"
+            desired["adbPath"] = adb_bin
+
+        out_lines = []
+        for line in lines:
+            stripped = line.strip()
+            if stripped.startswith("[") and stripped.endswith("]"):
+                if in_set_section:
+                    for k, v in desired.items():
+                        if k not in updated_keys:
+                            out_lines.append(f"{k}={v}")
+                            updated_keys.add(k)
+                in_set_section = (stripped == "[set]")
+                if in_set_section:
+                    has_set_section = True
+                out_lines.append(line)
+                continue
+
+            if in_set_section and "=" in stripped and not stripped.startswith("#"):
+                k = stripped.split("=", 1)[0].strip()
+                if k in desired:
+                    out_lines.append(f"{k}={desired[k]}")
+                    updated_keys.add(k)
+                    continue
+            out_lines.append(line)
+
+        if not has_set_section:
+            if out_lines and out_lines[-1].strip() != "":
+                out_lines.append("")
+            out_lines.append("[set]")
+            for k, v in desired.items():
+                out_lines.append(f"{k}={v}")
+        elif in_set_section:
+            for k, v in desired.items():
+                if k not in updated_keys:
+                    out_lines.append(f"{k}={v}")
+
+        conf_file.write_text("\n".join(out_lines) + "\n", encoding="utf-8")
+    except Exception:
+        pass
 
 
 def get_running_emulator_procs() -> dict:
@@ -409,8 +478,9 @@ def cmd_launch(avd_id: str, mode: str = "normal", custom_sdk: str = "") -> dict:
         return {"ok": False, "error": f"El emulador {avd_id} ya está en ejecución (PID {running_procs[avd_id]['pid']})"}
 
     clean_avd_locks(avd_id)
+    ensure_emulator_conf(paths)
 
-    cmd = [emu_bin, "-avd", avd_id]
+    cmd = [emu_bin, "-avd", avd_id, "-feature", "ClipboardSharing"]
     if mode == "cold":
         cmd.append("-no-snapshot-load")
     elif mode == "wipe":
@@ -700,6 +770,23 @@ def cmd_adb_action(serial: str, action: str, arg: str = "", custom_sdk: str = ""
         escaped = arg.replace("\\", "\\\\").replace(" ", "%s").replace("'", "\\'")
         rc, _, err = run_cmd([adb_bin, "-s", serial, "shell", "input", "text", escaped], timeout=3.0)
         return {"ok": rc == 0, "message": "Texto enviado al dispositivo" if rc == 0 else err}
+
+    if action == "paste-clipboard":
+        clip_text = ""
+        if shutil.which("wl-paste"):
+            _, out, _ = run_cmd(["wl-paste", "--no-newline"], timeout=2.0)
+            clip_text = out
+        if not clip_text and shutil.which("xclip"):
+            _, out, _ = run_cmd(["xclip", "-selection", "clipboard", "-o"], timeout=2.0)
+            clip_text = out
+        if not clip_text:
+            return {"ok": False, "error": "El portapapeles está vacío"}
+        first_line = clip_text.splitlines()[0].strip()
+        if not first_line:
+            return {"ok": False, "error": "El portapapeles no contiene texto"}
+        escaped = first_line.replace("\\", "\\\\").replace(" ", "%s").replace("'", "\\'")
+        rc, _, err = run_cmd([adb_bin, "-s", serial, "shell", "input", "text", escaped], timeout=4.0)
+        return {"ok": rc == 0, "message": "Portapapeles pegado en el emulador" if rc == 0 else err}
 
     if action == "toggle-dark":
         _, night_out, _ = run_cmd([adb_bin, "-s", serial, "shell", "cmd", "uimode", "night"], timeout=2.0)
