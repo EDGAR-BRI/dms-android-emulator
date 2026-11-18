@@ -1133,6 +1133,13 @@ PluginSettings {
                 defaultValue: ""
             }
 
+            ToggleSetting {
+                settingKey: "alwaysShowInBar"
+                label: "Mostrar siempre en la barra superior"
+                description: "Si está desactivado, el indicador en la barra superior aparece automáticamente solo cuando hay un emulador o dispositivo ADB activo"
+                defaultValue: false
+            }
+
             SliderSetting {
                 settingKey: "pollIntervalSec"
                 label: "Intervalo de actualización de estado"

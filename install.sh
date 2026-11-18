@@ -67,6 +67,33 @@ for base in [os.path.expanduser("~/.config/dms"), os.path.expanduser("~/.config/
     except Exception:
         pass
 
+    s_path = os.path.join(base, "settings.json")
+    if os.path.exists(s_path):
+        try:
+            with open(s_path, "r", encoding="utf-8") as f:
+                s_data = json.load(f)
+            changed = False
+            for bar in s_data.get("barConfigs", []):
+                c_widgets = bar.get("centerWidgets", [])
+                has_emu = any(
+                    (w == "androidEmulator") or (isinstance(w, dict) and w.get("id") == "androidEmulator")
+                    for w in c_widgets
+                )
+                if not has_emu:
+                    if "agentMonitor" in c_widgets:
+                        c_widgets.insert(c_widgets.index("agentMonitor") + 1, "androidEmulator")
+                    elif "music" in c_widgets:
+                        c_widgets.insert(c_widgets.index("music") + 1, "androidEmulator")
+                    else:
+                        c_widgets.insert(0, "androidEmulator")
+                    bar["centerWidgets"] = c_widgets
+                    changed = True
+            if changed:
+                with open(s_path, "w", encoding="utf-8") as f:
+                    json.dump(s_data, f, indent=2)
+        except Exception:
+            pass
+
 lock_path = os.path.expanduser("~/.config/dms/plugins.lock.json")
 lock_data = {"lockfileVersion": 1, "plugins": {}}
 if os.path.exists(lock_path):

@@ -23,6 +23,12 @@ PluginComponent {
     readonly property var activeDevice: daemonInstance ? daemonInstance.activeDevice : null
     readonly property bool isBusy: daemonInstance ? daemonInstance.isBusy : false
 
+    // Show automatically in the top bar whenever an emulator or ADB device is active (or always if configured)
+    readonly property bool alwaysShowInBar: Boolean(pluginData.alwaysShowInBar)
+    readonly property bool showInBar: alwaysShowInBar || runningCount > 0 || deviceCount > 0
+    _visibilityOverride: true
+    _visibilityOverrideValue: showInBar
+
     ccWidgetIcon: "smartphone"
     ccWidgetPrimaryText: "Android AVD"
     ccWidgetSecondaryText: {
@@ -397,21 +403,36 @@ PluginComponent {
 
     horizontalBarPill: Component {
         Row {
+            visible: root.showInBar
             spacing: Theme.spacingXS
 
             DIcon {
                 name: "smartphone"
                 size: root.iconSize
-                color: root.runningCount > 0 ? Theme.primary : Theme.surfaceVariantText
+                color: root.runningCount > 0
+                    ? (root.runningAvds.some(a => !a.boot_completed) ? Theme.warning : Theme.primary)
+                    : (root.deviceCount > 0 ? Theme.success : Theme.surfaceVariantText)
                 anchors.verticalCenter: parent.verticalCenter
             }
 
             StyledText {
-                visible: root.runningCount > 0
-                text: String(root.runningCount)
+                visible: root.runningCount > 0 || root.deviceCount > 0
+                text: {
+                    if (root.runningCount === 1 && root.runningAvds.length > 0) {
+                        const avd = root.runningAvds[0];
+                        return avd.display_name + (!avd.boot_completed ? " (Iniciando...)" : "");
+                    }
+                    if (root.runningCount > 1)
+                        return root.runningCount + " AVDs";
+                    if (root.deviceCount > 0 && root.activeDevice)
+                        return root.activeDevice.model || "ADB (" + root.deviceCount + ")";
+                    return "";
+                }
                 font.pixelSize: root.textSize
                 font.weight: Font.Bold
-                color: Theme.primary
+                color: root.runningCount > 0
+                    ? (root.runningAvds.some(a => !a.boot_completed) ? Theme.warning : Theme.primary)
+                    : Theme.surfaceText
                 anchors.verticalCenter: parent.verticalCenter
             }
         }
@@ -419,6 +440,7 @@ PluginComponent {
 
     verticalBarPill: Component {
         Column {
+            visible: root.showInBar
             spacing: Theme.spacingXXS
 
             DIcon {
@@ -429,8 +451,8 @@ PluginComponent {
             }
 
             StyledText {
-                visible: root.runningCount > 0
-                text: String(root.runningCount)
+                visible: root.runningCount > 0 || root.deviceCount > 0
+                text: String(root.runningCount > 0 ? root.runningCount : root.deviceCount)
                 font.pixelSize: root.textSize
                 font.weight: Font.Bold
                 color: Theme.primary
@@ -439,78 +461,105 @@ PluginComponent {
         }
     }
 
-    popoutWidth: 420
-    popoutHeight: 430
+    popoutWidth: 430
+    popoutHeight: 460
 
     popoutContent: Component {
-        Item {
-            anchors.fill: parent
+        Column {
+            id: popRootCol
+            width: parent ? parent.width : 400
+            spacing: Theme.spacingM
 
-            Column {
-                anchors.fill: parent
-                anchors.margins: Theme.spacingM
-                spacing: Theme.spacingM
+            Row {
+                width: parent.width
+                spacing: Theme.spacingS
 
-                Row {
-                    width: parent.width
-                    spacing: Theme.spacingS
+                DIcon {
+                    name: "smartphone"
+                    size: Theme.iconSize
+                    color: root.runningCount > 0 ? Theme.primary : Theme.surfaceText
+                    anchors.verticalCenter: parent.verticalCenter
+                }
 
-                    DIcon {
-                        name: "smartphone"
-                        size: Theme.iconSize
-                        color: Theme.primary
-                        anchors.verticalCenter: parent.verticalCenter
-                    }
+                Column {
+                    width: parent.width - popHeaderBtns.width - Theme.iconSize - Theme.spacingS * 2
+                    anchors.verticalCenter: parent.verticalCenter
 
                     StyledText {
-                        width: parent.width - popHeaderBtns.width - Theme.iconSize - Theme.spacingS * 2
+                        width: parent.width
                         text: "Emuladores Android & ADB"
                         font.pixelSize: Theme.fontSizeLarge
                         font.weight: Font.Bold
                         color: Theme.surfaceText
-                        anchors.verticalCenter: parent.verticalCenter
+                        elide: Text.ElideRight
                     }
 
-                    Row {
-                        id: popHeaderBtns
-                        spacing: Theme.spacingXXS
-                        anchors.verticalCenter: parent.verticalCenter
-
-                        DActionButton {
-                            buttonSize: Theme.buttonHeightXS
-                            iconSize: Theme.iconSizeSmall
-                            iconName: "sync"
-                            iconColor: Theme.surfaceText
-                            onClicked: {
-                                if (root.daemonInstance)
-                                    root.daemonInstance.refreshStatus();
-                            }
-                        }
-
-                        DActionButton {
-                            buttonSize: Theme.buttonHeightXS
-                            iconSize: Theme.iconSizeSmall
-                            iconName: "settings"
-                            iconColor: Theme.surfaceText
-                            onClicked: {
-                                root.closePopout();
-                                if (root.daemonInstance)
-                                    root.daemonInstance.openPluginSettings();
-                            }
-                        }
+                    StyledText {
+                        width: parent.width
+                        text: root.runningCount > 0
+                            ? (root.runningCount + " emulador(es) en ejecución • " + root.deviceCount + " ADB")
+                            : (root.avds.length + " AVDs disponibles")
+                        font.pixelSize: Theme.fontSizeSmall - 1
+                        color: root.runningCount > 0 ? Theme.primary : Theme.surfaceVariantText
+                        elide: Text.ElideRight
                     }
                 }
 
-                DFlickable {
-                    width: parent.width
-                    height: parent.height - 44
-                    contentHeight: popBody.implicitHeight
-                    clip: true
+                Row {
+                    id: popHeaderBtns
+                    spacing: Theme.spacingXXS
+                    anchors.verticalCenter: parent.verticalCenter
 
-                    EmulatorManagerBody {
-                        id: popBody
-                        width: parent.width
+                    DActionButton {
+                        visible: root.runningCount > 0
+                        buttonSize: Theme.buttonHeightXS
+                        iconSize: Theme.iconSizeSmall
+                        iconName: "stop_circle"
+                        iconColor: Theme.error
+                        Accessible.name: "Detener todos los emuladores"
+                        onClicked: {
+                            if (root.daemonInstance)
+                                root.daemonInstance.stopAll();
+                        }
                     }
+
+                    DActionButton {
+                        buttonSize: Theme.buttonHeightXS
+                        iconSize: Theme.iconSizeSmall
+                        iconName: "sync"
+                        iconColor: Theme.surfaceText
+                        Accessible.name: "Actualizar"
+                        onClicked: {
+                            if (root.daemonInstance)
+                                root.daemonInstance.refreshStatus();
+                        }
+                    }
+
+                    DActionButton {
+                        buttonSize: Theme.buttonHeightXS
+                        iconSize: Theme.iconSizeSmall
+                        iconName: "settings"
+                        iconColor: Theme.surfaceText
+                        Accessible.name: "Abrir configuración"
+                        onClicked: {
+                            root.closePopout();
+                            if (root.daemonInstance)
+                                root.daemonInstance.openPluginSettings();
+                        }
+                    }
+                }
+            }
+
+            DFlickable {
+                width: parent.width
+                height: Math.min(390, Math.max(200, popBody.implicitHeight))
+                implicitHeight: height
+                contentHeight: popBody.implicitHeight
+                clip: true
+
+                EmulatorManagerBody {
+                    id: popBody
+                    width: parent.width
                 }
             }
         }
