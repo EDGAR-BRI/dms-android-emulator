@@ -1140,14 +1140,12 @@ PluginSettings {
                 defaultValue: false
             }
 
-            SliderSetting {
-                settingKey: "pollIntervalSec"
-                label: "Intervalo de actualización de estado"
-                description: "Cada cuántos segundos comprobar si hay emuladores o dispositivos ADB activos"
-                defaultValue: 4
-                minimum: 2
-                maximum: 20
-                unit: "s"
+            StyledText {
+                width: parent.width
+                text: "Detección de apagado por evento del kernel (pidfd): el plugin no hace sondeo periódico en segundo plano (0% CPU) y detecta al instante cuando cierras un emulador."
+                font.pixelSize: Theme.fontSizeSmall
+                color: Theme.surfaceVariantText
+                wrapMode: Text.WordWrap
             }
         }
     }

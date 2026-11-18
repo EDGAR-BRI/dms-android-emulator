@@ -2,6 +2,7 @@
 import json
 import os
 import re
+import select
 import shlex
 import shutil
 import signal
@@ -844,6 +845,52 @@ def cmd_adb_action(serial: str, action: str, arg: str = "", custom_sdk: str = ""
     return {"ok": False, "error": f"Acción desconocida: {action}"}
 
 
+def wait_for_pids_exit(pid_args: list) -> dict:
+    """Sleep in the kernel using pidfd_open + poll (0% CPU, no timer loop) until any watched PID exits."""
+    pids = []
+    for raw in pid_args:
+        try:
+            p = int(raw)
+            if p > 0:
+                pids.append(p)
+        except ValueError:
+            pass
+
+    if not pids:
+        return {"ok": True, "event": "no_pids"}
+
+    fds = {}
+    poller = select.poll()
+    try:
+        for pid in pids:
+            if not Path(f"/proc/{pid}").exists():
+                return {"ok": True, "event": "already_exited", "pid": pid}
+            if hasattr(os, "pidfd_open"):
+                fd = os.pidfd_open(pid, 0)
+                fds[fd] = pid
+                poller.register(fd, select.POLLIN)
+
+        if fds:
+            events = poller.poll()
+            exited_pids = [fds.get(fd, 0) for fd, _ in events]
+            return {"ok": True, "event": "pid_exited", "pids": exited_pids}
+
+        # Fallback only for very old kernels without pidfd_open
+        while all(Path(f"/proc/{p}").exists() for p in pids):
+            time.sleep(2.0)
+        return {"ok": True, "event": "pid_exited"}
+    except ProcessLookupError:
+        return {"ok": True, "event": "already_exited"}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+    finally:
+        for fd in list(fds.keys()):
+            try:
+                os.close(fd)
+            except Exception:
+                pass
+
+
 def main():
     args = sys.argv[1:]
     custom_sdk = ""
@@ -866,6 +913,8 @@ def main():
     elif args[0] == "pick-apk":
         picked = pick_apk_file()
         res = {"ok": bool(picked), "cancelled": not bool(picked), "path": picked}
+    elif args[0] == "wait-exit":
+        res = wait_for_pids_exit(args[1:])
     elif args[0] == "adb-action" and len(args) >= 3:
         extra = args[3] if len(args) >= 4 else ""
         res = cmd_adb_action(args[1], args[2], extra, custom_sdk)

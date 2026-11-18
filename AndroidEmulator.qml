@@ -30,12 +30,13 @@ PluginComponent {
             return configuredDefaultAvd;
         return avds.length > 0 ? avds[0].id : "";
     }
-    readonly property int pollIntervalSec: {
-        const val = Number(pluginData.pollIntervalSec);
-        return (!isNaN(val) && val >= 2 && val <= 30) ? Math.round(val) : 4;
-    }
 
     readonly property var runningAvds: avds.filter(a => a.running)
+    readonly property var runningPids: runningAvds.map(a => Number(a.pid) || 0).filter(p => p > 0)
+    readonly property string watchedPidsKey: runningPids.join(",")
+    readonly property bool anyBooting: runningAvds.some(a => !a.boot_completed)
+    property int bootPollTicks: 0
+
     readonly property var activeDevice: {
         const readyEmu = adbDevices.find(d => d.state === "device" && d.is_emulator);
         if (readyEmu)
@@ -82,6 +83,7 @@ PluginComponent {
         const modeText = m === "cold" ? " (Cold Boot)" : (m === "wipe" ? " (Wipe Data)" : (m === "no-window" ? " (Headless)" : ""));
         const avd = avds.find(a => a.id === avdId);
         const label = avd ? avd.display_name : avdId;
+        root.bootPollTicks = 0;
         runHelperAction(["launch", avdId, m], "Iniciando " + label + "...", "Iniciando emulador " + label + modeText);
     }
 
@@ -184,12 +186,42 @@ PluginComponent {
         Qt.callLater(refreshStatus);
     }
 
+    onWatchedPidsKeyChanged: {
+        syncPidWatcher();
+    }
+
+    function syncPidWatcher() {
+        if (pidWatchProc.running) {
+            pidWatchProc.running = false;
+        }
+        if (root.runningPids.length === 0)
+            return;
+        const args = ["wait-exit"].concat(root.runningPids.map(p => String(p)));
+        pidWatchProc.command = buildHelperCmd(args);
+        pidWatchProc.running = true;
+    }
+
+    // Only runs briefly while a newly launched emulator is still booting (stops completely once boot_completed is true)
     Timer {
-        id: pollTimer
-        interval: root.pollIntervalSec * 1000
+        id: bootTimer
+        interval: 2500
         repeat: true
-        running: true
-        onTriggered: root.refreshStatus()
+        running: root.anyBooting && root.bootPollTicks < 40
+        onTriggered: {
+            root.bootPollTicks += 1;
+            root.refreshStatus();
+        }
+    }
+
+    // Kernel pidfd watcher: 0% CPU, no timer loop. Wakes up only at the exact moment an emulator PID exits.
+    Process {
+        id: pidWatchProc
+        running: false
+        onExited: {
+            if (root.runningPids.length > 0) {
+                Qt.callLater(root.refreshStatus);
+            }
+        }
     }
 
     Timer {

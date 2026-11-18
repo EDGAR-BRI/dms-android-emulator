@@ -61,6 +61,12 @@ PluginComponent {
         }
     }
 
+    onInteractionActiveChanged: {
+        if (interactionActive && daemonInstance) {
+            daemonInstance.refreshStatus();
+        }
+    }
+
     pillRightClickAction: () => {
         if (root.daemonInstance) {
             root.daemonInstance.toggleDefaultAvd();
