@@ -547,6 +547,75 @@ def find_terminal_command(shell_cmd: str) -> list:
     return []
 
 
+def pick_apk_file() -> str:
+    home = Path.home()
+    start_dir = home / "Descargas"
+    if not start_dir.is_dir():
+        start_dir = home / "Downloads" if (home / "Downloads").is_dir() else home
+
+    if shutil.which("zenity"):
+        proc = subprocess.run(
+            [
+                "zenity",
+                "--file-selection",
+                "--title=Seleccionar archivo APK",
+                f"--filename={start_dir}/",
+                "--file-filter=Paquetes Android (*.apk) | *.apk *.APK",
+                "--file-filter=Todos los archivos | *",
+            ],
+            capture_output=True,
+            text=True,
+        )
+        if proc.returncode == 0 and proc.stdout.strip():
+            return proc.stdout.strip()
+        return ""
+
+    if shutil.which("kdialog"):
+        proc = subprocess.run(
+            [
+                "kdialog",
+                "--getopenfilename",
+                str(start_dir),
+                "*.apk *.APK|Paquetes Android (*.apk)",
+            ],
+            capture_output=True,
+            text=True,
+        )
+        if proc.returncode == 0 and proc.stdout.strip():
+            return proc.stdout.strip()
+        return ""
+
+    try:
+        import gi
+        gi.require_version("Gtk", "3.0")
+        from gi.repository import Gtk
+
+        dialog = Gtk.FileChooserDialog(
+            title="Seleccionar archivo APK",
+            parent=None,
+            action=Gtk.FileChooserAction.OPEN,
+        )
+        dialog.add_buttons(
+            Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL,
+            "Seleccionar", Gtk.ResponseType.OK,
+        )
+        dialog.set_current_folder(str(start_dir))
+        flt = Gtk.FileFilter()
+        flt.set_name("Paquetes Android (*.apk)")
+        flt.add_pattern("*.apk")
+        flt.add_pattern("*.APK")
+        dialog.add_filter(flt)
+        chosen = ""
+        if dialog.run() == Gtk.ResponseType.OK:
+            chosen = dialog.get_filename() or ""
+        dialog.destroy()
+        while Gtk.events_pending():
+            Gtk.main_iteration()
+        return chosen
+    except Exception:
+        return ""
+
+
 def cmd_adb_action(serial: str, action: str, arg: str = "", custom_sdk: str = "") -> dict:
     paths = resolve_sdk_paths(custom_sdk)
     adb_bin = paths.get("adb_bin", "")
@@ -664,11 +733,22 @@ def cmd_adb_action(serial: str, action: str, arg: str = "", custom_sdk: str = ""
         return {"ok": True, "message": f"Logcat abierto para {serial}"}
 
     if action == "install-apk":
-        apk_path = os.path.expanduser(arg.strip())
+        raw_arg = arg.strip()
+        if not raw_arg:
+            picked = pick_apk_file()
+            if not picked:
+                return {"ok": False, "cancelled": True, "message": ""}
+            apk_path = os.path.expanduser(picked)
+        else:
+            apk_path = os.path.expanduser(raw_arg)
         if not apk_path or not os.path.isfile(apk_path):
             return {"ok": False, "error": f"No existe el archivo APK: {apk_path}"}
-        rc, out, err = run_cmd([adb_bin, "-s", serial, "install", "-r", apk_path], timeout=60.0)
-        return {"ok": rc == 0, "message": (out + err).strip() or "APK instalado"}
+        rc, out, err = run_cmd([adb_bin, "-s", serial, "install", "-r", apk_path], timeout=90.0)
+        return {
+            "ok": rc == 0,
+            "path": apk_path,
+            "message": f"APK instalado: {Path(apk_path).name}" if rc == 0 else ((out + err).strip() or "Error al instalar APK"),
+        }
 
     if action == "reboot":
         rc, out, err = run_cmd([adb_bin, "-s", serial, "reboot"], timeout=4.0)
@@ -696,6 +776,9 @@ def main():
         res = {"ok": True, "avd_id": args[1], "removed": removed}
     elif args[0] == "update-config" and len(args) >= 3:
         res = cmd_update_config(args[1], args[2])
+    elif args[0] == "pick-apk":
+        picked = pick_apk_file()
+        res = {"ok": bool(picked), "cancelled": not bool(picked), "path": picked}
     elif args[0] == "adb-action" and len(args) >= 3:
         extra = args[3] if len(args) >= 4 else ""
         res = cmd_adb_action(args[1], args[2], extra, custom_sdk)

@@ -259,13 +259,14 @@ PluginComponent {
 
                     Repeater {
                         model: [
-                            { "label": "Atrás",    "icon": "arrow_back",    "act": "keyevent",      "arg": "BACK" },
-                            { "label": "Inicio",   "icon": "home",          "act": "keyevent",      "arg": "HOME" },
-                            { "label": "Recientes","icon": "apps",          "act": "keyevent",      "arg": "RECENTS" },
-                            { "label": "Oscuro",   "icon": "dark_mode",     "act": "toggle-dark",   "arg": "" },
-                            { "label": "Bounds",   "icon": "grid_on",       "act": "toggle-bounds", "arg": "" },
-                            { "label": "Logcat",   "icon": "article",       "act": "logcat",        "arg": "" },
-                            { "label": "Pantalla", "icon": "cast",          "act": "scrcpy",        "arg": "" }
+                            { "label": "Atrás",    "icon": "arrow_back",     "act": "keyevent",      "arg": "BACK" },
+                            { "label": "Inicio",   "icon": "home",           "act": "keyevent",      "arg": "HOME" },
+                            { "label": "Recientes","icon": "apps",           "act": "keyevent",      "arg": "RECENTS" },
+                            { "label": "Oscuro",   "icon": "dark_mode",      "act": "toggle-dark",   "arg": "" },
+                            { "label": "Bounds",   "icon": "grid_on",        "act": "toggle-bounds", "arg": "" },
+                            { "label": "Logcat",   "icon": "article",        "act": "logcat",        "arg": "" },
+                            { "label": "Pantalla", "icon": "cast",           "act": "scrcpy",        "arg": "" },
+                            { "label": "APK",      "icon": "install_mobile", "act": "install-apk",   "arg": "" }
                         ]
 
                         delegate: StyledRect {

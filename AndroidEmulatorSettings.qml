@@ -114,6 +114,39 @@ PluginSettings {
         }
     }
 
+    Process {
+        id: pickApkProc
+        property bool installAfterPick: false
+        command: ["python3", root.pluginDir + "/avd_helper.py", "pick-apk"]
+        running: false
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const raw = (text || "").trim();
+                const shouldInstall = pickApkProc.installAfterPick;
+                pickApkProc.installAfterPick = false;
+                if (!raw)
+                    return;
+                try {
+                    const res = JSON.parse(raw);
+                    if (res.ok && res.path) {
+                        apkPathInput.text = String(res.path);
+                        if (shouldInstall && root.daemonInstance && root.activeAdbDevice) {
+                            ToastService.showInfo("Instalando " + String(res.path).split("/").pop() + "...");
+                            root.daemonInstance.runAdbAction(root.activeAdbDevice.serial, "install-apk", String(res.path));
+                        }
+                    }
+                } catch (e) {}
+            }
+        }
+    }
+
+    function browseForApk(autoInstall) {
+        if (pickApkProc.running)
+            return;
+        pickApkProc.installAfterPick = Boolean(autoInstall);
+        pickApkProc.running = true;
+    }
+
     function checkForUpdates() {
         if (root.updateStatus === "checking" || root.updateStatus === "updating")
             return;
@@ -986,7 +1019,7 @@ PluginSettings {
                 }
             }
 
-            // Instalar APK por ruta
+            // Instalar APK por ruta o buscador de archivos
             Row {
                 visible: root.activeAdbDevice !== null
                 width: parent.width
@@ -994,13 +1027,24 @@ PluginSettings {
 
                 DankTextField {
                     id: apkPathInput
-                    width: parent.width - installApkBtn.width - Theme.spacingS
-                    placeholderText: "Ruta de archivo .apk a instalar (ej. ~/Descargas/app.apk)..."
+                    width: parent.width - browseApkBtn.width - installApkBtn.width - Theme.spacingS * 2
+                    placeholderText: "Ruta de archivo .apk (o pulsa Buscar / Instalar APK)..."
                     onAccepted: {
                         if (text.trim() !== "" && root.daemonInstance && root.activeAdbDevice) {
+                            ToastService.showInfo("Instalando APK...");
                             root.daemonInstance.runAdbAction(root.activeAdbDevice.serial, "install-apk", text.trim());
+                        } else if (text.trim() === "") {
+                            root.browseForApk(true);
                         }
                     }
+                }
+
+                ActionChip {
+                    id: browseApkBtn
+                    anchors.verticalCenter: parent.verticalCenter
+                    iconName: "folder_open"
+                    labelText: "Buscar"
+                    onClicked: root.browseForApk(false)
                 }
 
                 ActionChip {
@@ -1008,9 +1052,15 @@ PluginSettings {
                     anchors.verticalCenter: parent.verticalCenter
                     iconName: "install_mobile"
                     labelText: "Instalar APK"
+                    activeChip: true
                     onClicked: {
-                        if (apkPathInput.text.trim() !== "" && root.daemonInstance && root.activeAdbDevice) {
+                        if (!root.daemonInstance || !root.activeAdbDevice)
+                            return;
+                        if (apkPathInput.text.trim() !== "") {
+                            ToastService.showInfo("Instalando APK...");
                             root.daemonInstance.runAdbAction(root.activeAdbDevice.serial, "install-apk", apkPathInput.text.trim());
+                        } else {
+                            root.browseForApk(true);
                         }
                     }
                 }

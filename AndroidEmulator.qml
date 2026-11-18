@@ -246,7 +246,7 @@ PluginComponent {
                                 if (msg)
                                     ToastService.showInfo(msg);
                             }
-                        } else if (res.error || res.message) {
+                        } else if (!res.cancelled && (res.error || res.message)) {
                             ToastService.showError(String(res.error || res.message));
                         }
                     } catch (e) {
